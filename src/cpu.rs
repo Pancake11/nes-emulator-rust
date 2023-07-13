@@ -145,6 +145,7 @@ impl CPU {
             }
         }
     }
+
     fn load(&mut self, program: Vec<u8>) {
         // program memory is in 0x8000 to 0xFFFF
         self.memory[0x8000..(0x8000 + program.len())]
@@ -161,6 +162,24 @@ impl CPU {
         self.flags = CpuFlags::from_bits_truncate(0b100100);
 
         self.pc = self.mem_read_u16(0xFFFC);
+    }
+
+    fn stack_pop(&mut self) -> u8 {
+        self.sp = self.sp.wrapping_add(1);
+        self.mem_read_u8((STACK as u16) + self.sp as u16)
+    }
+
+    fn stack_push_u8(&mut self, data: u8) {
+        self.mem_write_u8((STACK as u16) + self.sp as u16, data);
+        self.sp = self.sp.wrapping_sub(1);
+    }
+
+    fn stack_push_u16(&mut self, data: u16) {
+        let hi = (data >> 8) as u8;
+        let lo = (data & 0xFF) as u8;
+
+        self.stack_push_u8(hi);
+        self.stack_push_u8(lo);
     }
 
     fn load_and_run(&mut self, program: Vec<u8>) {
@@ -187,6 +206,22 @@ impl CPU {
         let value = self.mem_read_u8(addr);
 
         self.set_ra(value);
+    }
+
+    fn ldx(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        let value = self.mem_read_u8(addr);
+
+        self.rx = value;
+        self.update_zn_flags(self.rx);
+    }
+
+    fn ldy(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        let value = self.mem_read_u8(addr);
+
+        self.ry = value;
+        self.update_zn_flags(self.ry);
     }
 
     fn sta(&mut self, mode: &AddressingMode) {
@@ -331,6 +366,106 @@ impl CPU {
         self.pc = mem_addr;
     }
 
+    fn jsr(&mut self) {
+        self.stack_push_u16(self.pc + 2 - 1);
+        let addr = self.mem_read_u16(self.pc);
+        self.pc = addr;
+    }
+
+    fn lsr(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let mut data = self.mem_read_u8(addr);
+
+        if data & 1 == 1 {
+            self.set_carry_flag();
+        } else {
+            self.clear_carry_flag();
+        }
+
+        data = data >> 1;
+        self.mem_write_u8(addr, data);
+        self.update_zn_flags(data);
+    }
+
+    fn ora(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let data = self.mem_read_u8(addr);
+
+        self.set_ra(self.ra | data);
+    }
+
+    fn php(&mut self) {
+        let mut flags = self.flags.clone();
+        flags.insert(CpuFlags::B);
+        flags.insert(CpuFlags::B2);
+        self.stack_push_u8(flags.bits());
+    }
+
+    fn pla(&mut self) {
+        let data = self.stack_pop();
+        self.set_ra(data);
+    }
+
+    fn plp(&mut self) {
+        self.flags.bits = self.stack_pop();
+        self.flags.remove(CpuFlags::B);
+        self.flags.remove(CpuFlags::B2);
+    }
+
+    fn rol_acc(&mut self) {
+        let mut data = self.ra;
+        let old_c = self.flags.contains(CpuFlags::C);
+
+        if data >> 7 == 1 {
+            self.set_carry_flag();
+        } else {
+            self.clear_carry_flag();
+        }
+
+        data = data << 1;
+        if old_c {
+            data = data | 1;
+        }
+
+        self.set_ra(data);
+    }
+
+    fn rol_mem(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let mut data = self.mem_read_u8(addr);
+        let old_c = self.flags.contains(CpuFlags::C);
+
+        if data >> 7 == 1 {
+            self.set_carry_flag();
+        } else {
+            self.clear_carry_flag();
+        }
+
+        data = data << 1;
+        if old_c {
+            data = data | 1;
+        }
+
+        self.mem_write_u8(addr, data);
+        self.update_zn_flags(data);
+    }
+
+    fn rol(&mut self, mode: &AddressingMode) {
+        if mode == &AddressingMode::None {
+            self.rol_acc();
+        } else {
+            self.rol_mem(mode);
+        }
+    }
+
+    fn ror(&mut self, mode: &AddressingMode) {
+        if mode == &AddressingMode::None {
+            self.ror_acc();
+        } else {
+            self.ror_mem(mode);
+        }
+    }
+
     fn update_zn_flags(&mut self, result: u8) {
         if result == 0 {
             self.flags = self.flags | CpuFlags::Z;
@@ -394,8 +529,23 @@ impl CPU {
                 opcodes::Code::INY => self.iny(),
 
                 opcodes::Code::JMP => self.jmp(&opcode.mode),
+                opcodes::Code::JSR => self.jsr(),
 
                 opcodes::Code::LDA => self.lda(&opcode.mode),
+                opcodes::Code::LDX => self.ldx(&opcode.mode),
+                opcodes::Code::LDY => self.ldy(&opcode.mode),
+
+                opcodes::Code::LSR => self.lsr(&opcode.mode),
+
+                opcodes::Code::NOP => { /* nothing */ },
+
+                opcodes::Code::ORA => self.ora(&opcode.mode),
+
+                opcodes::Code::PHA => self.stack_push_u8(self.ra),
+                opcodes::Code::PHP => self.php(),
+                opcodes::Code::PLA => self.pla(),
+                opcodes::Code::PLP => self.plp(),
+
                 opcodes::Code::STA => self.sta(&opcode.mode),
                 opcodes::Code::TAX => self.tax(),
                 _ => todo!(),
