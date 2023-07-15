@@ -46,7 +46,7 @@ pub enum AddressingMode {
     None,
 }
 
-trait Mem {
+pub trait Mem {
     fn mem_read_u8(&self, addr: u16) -> u8;
     fn mem_write_u8(&mut self, addr:u16, data: u8);
 
@@ -146,15 +146,15 @@ impl CPU {
         }
     }
 
-    fn load(&mut self, program: Vec<u8>) {
+    pub fn load(&mut self, program: Vec<u8>) {
         // program memory is in 0x8000 to 0xFFFF
-        self.memory[0x8000..(0x8000 + program.len())]
+        self.memory[0x0600..(0x0600 + program.len())]
             .copy_from_slice(&program[..]);
 
-        self.mem_write_u16(0xFFFC, 0x8000);
+        self.mem_write_u16(0xFFFC, 0x0600);
     }
 
-    fn reset(&mut self) {
+    pub fn reset(&mut self) {
         self.ra = 0;
         self.rx = 0;
         self.ry = 0;
@@ -167,6 +167,13 @@ impl CPU {
     fn stack_pop(&mut self) -> u8 {
         self.sp = self.sp.wrapping_add(1);
         self.mem_read_u8((STACK as u16) + self.sp as u16)
+    }
+
+    fn stack_pop_u16(&mut self) -> u16 {
+        let hi = self.stack_pop() as u16;
+        let lo = self.stack_pop() as u16;
+
+        hi << 8 | lo
     }
 
     fn stack_push_u8(&mut self, data: u8) {
@@ -182,7 +189,7 @@ impl CPU {
         self.stack_push_u8(lo);
     }
 
-    fn load_and_run(&mut self, program: Vec<u8>) {
+    pub fn load_and_run(&mut self, program: Vec<u8>) {
         self.load(program);
         self.reset();
         self.run();
@@ -229,11 +236,25 @@ impl CPU {
         self.mem_write_u8(addr, self.ra);
     }
 
+    fn stx(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        self.mem_write_u8(addr, self.rx);
+    }
+
+    fn sty(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        self.mem_write_u8(addr, self.ry);
+    }
+
     fn tax(&mut self) {
         self.rx = self.ra;
         self.update_zn_flags(self.rx);
     }
 
+    fn tay(&mut self) {
+        self.ry = self.ra;
+        self.update_zn_flags(self.ry);
+    }
 
     fn and(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
@@ -458,12 +479,109 @@ impl CPU {
         }
     }
 
+    fn ror_mem(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let mut data = self.mem_read_u8(addr);
+        let old_c = self.flags.contains(CpuFlags::C);
+
+        if data & 1 == 1 {
+            self.set_carry_flag();
+        } else {
+            self.clear_carry_flag();
+        }
+
+        data = data >> 1;
+        if old_c {
+            data = data | 0b1000_0000;
+        }
+
+        self.mem_write_u8(addr, data);
+        self.update_zn_flags(data);
+    }
+
+    fn ror_acc(&mut self) {
+        let mut data = self.ra;
+        let old_c = self.flags.contains(CpuFlags::C);
+
+        if data & 1 == 1 {
+            self.set_carry_flag();
+        } else {
+            self.clear_carry_flag();
+        }
+
+        data = data >> 1;
+        if old_c {
+            data = data | 0b1000_0000;
+        }
+
+        self.set_ra(data);
+    }
+
     fn ror(&mut self, mode: &AddressingMode) {
         if mode == &AddressingMode::None {
             self.ror_acc();
         } else {
             self.ror_mem(mode);
         }
+    }
+
+    fn rti(&mut self) {
+        self.flags.bits = self.stack_pop();
+        self.flags.remove(CpuFlags::B);
+        self.flags.remove(CpuFlags::B2);
+
+        self.pc = self.stack_pop_u16();
+    }
+
+    fn tsx(&mut self) {
+        self.rx = self.sp;
+        self.update_zn_flags(self.rx);
+    }
+
+    fn txs(&mut self) {
+        self.sp = self.rx;
+    }
+
+    fn add_to_ra(&mut self, data: u8) {
+        let sum = self.ra as u16 
+                + data as u16
+                + self.flags.contains(CpuFlags::C) as u16;
+
+        let carry = sum > 0xff;
+        
+        if carry {
+            self.flags.insert(CpuFlags::C);
+        } else {
+            self.flags.remove(CpuFlags::C);
+        }
+
+        let res = sum as u8;
+
+        if (data ^ res) & (res ^ self.ra) & 0x80 != 0 {
+            self.flags.insert(CpuFlags::V);
+        } else {
+            self.flags.remove(CpuFlags::V);
+        }
+
+        self.set_ra(res);
+    }
+
+    fn adc(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        let data = self.mem_read_u8(addr);
+
+        self.add_to_ra(data);
+    }
+
+    fn sbc(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        let data = self.mem_read_u8(addr);
+
+        self.add_to_ra(((data as i8).wrapping_neg().wrapping_sub(1)) as u8);
+    }
+
+    fn rts(&mut self) {
+        self.pc = self.stack_pop_u16() + 1;
     }
 
     fn update_zn_flags(&mut self, result: u8) {
@@ -481,10 +599,17 @@ impl CPU {
     }
 
     pub fn run(&mut self) {
+    }
+
+    pub fn run_with_callback<F>(&mut self, mut callback: F)
+    where F: FnMut(&mut CPU),
+    {
         let ref opcodes: HashMap<u8, &'static opcodes::OpCode> =
             *opcodes::OPCODES_MAP;
 
         loop {
+            callback(self);
+
             let code = self.mem_read_u8(self.pc);
             self.pc += 1;
             let pc_state = self.pc;
@@ -494,7 +619,7 @@ impl CPU {
 
             dbg!(opcode);
             match opcode.opcode {
-                //opcodes::Code::ADC => self.adc(&opcode.mode),
+                opcodes::Code::ADC => self.adc(&opcode.mode),
                 opcodes::Code::AND => self.and(&opcode.mode),
                 opcodes::Code::ASL => self.asl(&opcode.mode),
                 opcodes::Code::BIT => self.bit(&opcode.mode),
@@ -546,8 +671,30 @@ impl CPU {
                 opcodes::Code::PLA => self.pla(),
                 opcodes::Code::PLP => self.plp(),
 
+                opcodes::Code::ROR => self.ror(&opcode.mode),
+                opcodes::Code::ROL => self.rol(&opcode.mode),
+
+                opcodes::Code::RTI => self.rti(),
+                opcodes::Code::RTS => self.rts(),
+
+                opcodes::Code::SBC => self.sbc(&opcode.mode),
+
+                opcodes::Code::SEC => self.set_carry_flag(),
+                opcodes::Code::SED => self.flags.insert(CpuFlags::D),
+                opcodes::Code::SEI => self.flags.insert(CpuFlags::I),
+
                 opcodes::Code::STA => self.sta(&opcode.mode),
+                opcodes::Code::STX => self.stx(&opcode.mode),
+                opcodes::Code::STY => self.sty(&opcode.mode),
+
                 opcodes::Code::TAX => self.tax(),
+                opcodes::Code::TAY => self.tay(),
+
+                opcodes::Code::TSX => self.tsx(),
+                opcodes::Code::TXA => self.set_ra(self.rx),
+                opcodes::Code::TXS => self.txs(),
+                opcodes::Code::TYA => self.set_ra(self.ry),
+
                 _ => todo!(),
             }
 
