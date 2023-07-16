@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use crate::opcodes;
+use std::collections::HashMap;
 
 bitflags! {
     pub struct CpuFlags: u8 {
@@ -28,7 +28,7 @@ pub struct CPU {
     // flags
     pub flags: CpuFlags,
     // memory
-    memory: [u8; 0xFFFF]
+    memory: [u8; 0xFFFF],
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -48,14 +48,13 @@ pub enum AddressingMode {
 
 pub trait Mem {
     fn mem_read_u8(&self, addr: u16) -> u8;
-    fn mem_write_u8(&mut self, addr:u16, data: u8);
+    fn mem_write_u8(&mut self, addr: u16, data: u8);
 
     // TODO: use rusts native little endian conversion (from_le|ne_bytes)
     fn mem_read_u16(&mut self, addr: u16) -> u16 {
         let lo = self.mem_read_u8(addr) as u16;
         let hi = self.mem_read_u8(addr + 1) as u16;
-        // should be (hi << 8) | (lo as u16) but we already converted ?
-        (hi << 8) | lo
+        (hi << 8) | (lo as u16)
     }
 
     // TODO: use rusts native little endian conversion (from_le|ne_bytes)
@@ -94,11 +93,9 @@ impl CPU {
         match mode {
             AddressingMode::Immediate => self.pc,
 
-            AddressingMode::ZeroPage  =>
-                self.mem_read_u8(self.pc) as u16,
+            AddressingMode::ZeroPage => self.mem_read_u8(self.pc) as u16,
 
-            AddressingMode::Absolute =>
-                self.mem_read_u16(self.pc),
+            AddressingMode::Absolute => self.mem_read_u16(self.pc),
 
             AddressingMode::ZeroPage_X => {
                 let pos = self.mem_read_u8(self.pc);
@@ -148,8 +145,7 @@ impl CPU {
 
     pub fn load(&mut self, program: Vec<u8>) {
         // program memory is in 0x8000 to 0xFFFF
-        self.memory[0x0600..(0x0600 + program.len())]
-            .copy_from_slice(&program[..]);
+        self.memory[0x0600..(0x0600 + program.len())].copy_from_slice(&program[..]);
 
         self.mem_write_u16(0xFFFC, 0x0600);
     }
@@ -170,8 +166,8 @@ impl CPU {
     }
 
     fn stack_pop_u16(&mut self) -> u16 {
-        let hi = self.stack_pop() as u16;
         let lo = self.stack_pop() as u16;
+        let hi = self.stack_pop() as u16;
 
         hi << 8 | lo
     }
@@ -232,7 +228,7 @@ impl CPU {
     }
 
     fn sta(&mut self, mode: &AddressingMode) {
-        let addr = self.get_operand_address(&mode);
+        let addr = self.get_operand_address(mode);
         self.mem_write_u8(addr, self.ra);
     }
 
@@ -381,19 +377,56 @@ impl CPU {
         self.update_zn_flags(self.ra);
     }
 
+    fn jmp_abs(&mut self) {
+        let addr = self.mem_read_u16(self.pc);
+        dbg!(addr);
+        self.pc = addr;
+    }
+
+    fn jmp_ind(&mut self) {
+        let addr = self.mem_read_u16(self.pc);
+        // 6502 bug with page boundary
+        let indirect_ref = if addr & 0x00FF == 0x00FF {
+            let lo = self.mem_read_u8(addr);
+            let hi = self.mem_read_u8(addr & 0xFF00);
+            (hi as u16) << 8 | (lo as u16)
+        } else {
+            self.mem_read_u16(addr)
+        };
+
+        dbg!(indirect_ref);
+        self.pc = indirect_ref;
+    }
+
     fn jmp(&mut self, mode: &AddressingMode) {
-        let addr = self.get_operand_address(mode);
-        let mem_addr = self.mem_read_u16(addr);
-        self.pc = mem_addr;
+        if mode == &AddressingMode::Absolute {
+            self.jmp_abs();
+        } else {
+            self.jmp_ind();
+        }
     }
 
     fn jsr(&mut self) {
         self.stack_push_u16(self.pc + 2 - 1);
+        dbg!(self.pc + 2 - 1);
         let addr = self.mem_read_u16(self.pc);
         self.pc = addr;
     }
 
-    fn lsr(&mut self, mode: &AddressingMode) {
+    fn lsr_acc(&mut self) {
+        let mut data = self.ra;
+
+        if data & 1 == 1 {
+            self.set_carry_flag();
+        } else {
+            self.clear_carry_flag();
+        }
+
+        data = data >> 1;
+        self.set_ra(data);
+    }
+
+    fn lsr_mem(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let mut data = self.mem_read_u8(addr);
 
@@ -406,6 +439,14 @@ impl CPU {
         data = data >> 1;
         self.mem_write_u8(addr, data);
         self.update_zn_flags(data);
+    }
+
+    fn lsr(&mut self, mode: &AddressingMode) {
+        if mode == &AddressingMode::None {
+            self.lsr_acc();
+        } else {
+            self.lsr_mem(mode);
+        }
     }
 
     fn ora(&mut self, mode: &AddressingMode) {
@@ -543,12 +584,10 @@ impl CPU {
     }
 
     fn add_to_ra(&mut self, data: u8) {
-        let sum = self.ra as u16 
-                + data as u16
-                + self.flags.contains(CpuFlags::C) as u16;
+        let sum = self.ra as u16 + data as u16 + self.flags.contains(CpuFlags::C) as u16;
 
         let carry = sum > 0xff;
-        
+
         if carry {
             self.flags.insert(CpuFlags::C);
         } else {
@@ -598,23 +637,22 @@ impl CPU {
         }
     }
 
-    pub fn run(&mut self) {
-    }
+    pub fn run(&mut self) {}
 
     pub fn run_with_callback<F>(&mut self, mut callback: F)
-    where F: FnMut(&mut CPU),
+    where
+        F: FnMut(&mut CPU),
     {
-        let ref opcodes: HashMap<u8, &'static opcodes::OpCode> =
-            *opcodes::OPCODES_MAP;
+        let ref opcodes: HashMap<u8, &'static opcodes::OpCode> = *opcodes::OPCODES_MAP;
 
         loop {
-            callback(self);
-
             let code = self.mem_read_u8(self.pc);
             self.pc += 1;
             let pc_state = self.pc;
 
-            let opcode = opcodes.get(&code)
+            dbg!(code);
+            let opcode = opcodes
+                .get(&code)
                 .expect(&format!("OpCode {:x} is not recognised", code));
 
             dbg!(opcode);
@@ -662,7 +700,7 @@ impl CPU {
 
                 opcodes::Code::LSR => self.lsr(&opcode.mode),
 
-                opcodes::Code::NOP => { /* nothing */ },
+                opcodes::Code::NOP => { /* nothing */ }
 
                 opcodes::Code::ORA => self.ora(&opcode.mode),
 
@@ -694,29 +732,29 @@ impl CPU {
                 opcodes::Code::TXA => self.set_ra(self.rx),
                 opcodes::Code::TXS => self.txs(),
                 opcodes::Code::TYA => self.set_ra(self.ry),
-
-                _ => todo!(),
             }
 
             if pc_state == self.pc {
                 self.pc += (opcode.len - 1) as u16;
             }
+
+            callback(self);
         }
     }
 }
 
 #[cfg(test)]
 mod test {
-   use super::*;
+    use super::*;
 
-   #[test]
-   fn test_0xa9_lda_immediate_load_data() {
-       let mut cpu = CPU::new();
-       cpu.load_and_run(vec![0xa9, 0x05, 0x00]);
-       assert_eq!(cpu.ra, 0x05);
-       assert!(cpu.flags.bits() & 0b0000_0010 == 0b00);
-       assert!(cpu.flags.bits() & 0b1000_0000 == 0);
-   }
+    #[test]
+    fn test_0xa9_lda_immediate_load_data() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0x05, 0x00]);
+        assert_eq!(cpu.ra, 0x05);
+        assert!(cpu.flags.bits() & 0b0000_0010 == 0b00);
+        assert!(cpu.flags.bits() & 0b1000_0000 == 0);
+    }
 
     #[test]
     fn test_0xa9_lda_zero_flag() {
