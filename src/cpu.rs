@@ -1,3 +1,4 @@
+use crate::bus::Bus;
 use crate::opcodes;
 use std::collections::HashMap;
 
@@ -29,6 +30,7 @@ pub struct CPU {
     pub flags: CpuFlags,
     // memory
     memory: [u8; 0xFFFF],
+    pub bus: Bus,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -68,11 +70,19 @@ pub trait Mem {
 
 impl Mem for CPU {
     fn mem_read_u8(&self, addr: u16) -> u8 {
-        self.memory[addr as usize]
+        self.bus.mem_read_u8(addr)
     }
 
     fn mem_write_u8(&mut self, addr: u16, data: u8) {
-        self.memory[addr as usize] = data;
+        self.bus.mem_write_u8(addr, data);
+    }
+
+    fn mem_read_u16(&mut self, addr: u16) -> u16 {
+        self.bus.mem_read_u16(addr)
+    }
+
+    fn mem_write_u16(&mut self, addr: u16, data: u16) {
+        self.bus.mem_write_u16(addr, data);
     }
 }
 
@@ -86,6 +96,7 @@ impl CPU {
             pc: 0,
             flags: CpuFlags::from_bits_truncate(0b100100),
             memory: [0; 0xFFFF],
+            bus: Bus::new(),
         }
     }
 
@@ -379,7 +390,6 @@ impl CPU {
 
     fn jmp_abs(&mut self) {
         let addr = self.mem_read_u16(self.pc);
-        dbg!(addr);
         self.pc = addr;
     }
 
@@ -394,7 +404,6 @@ impl CPU {
             self.mem_read_u16(addr)
         };
 
-        dbg!(indirect_ref);
         self.pc = indirect_ref;
     }
 
@@ -408,7 +417,6 @@ impl CPU {
 
     fn jsr(&mut self) {
         self.stack_push_u16(self.pc + 2 - 1);
-        dbg!(self.pc + 2 - 1);
         let addr = self.mem_read_u16(self.pc);
         self.pc = addr;
     }
@@ -650,7 +658,6 @@ impl CPU {
             self.pc += 1;
             let pc_state = self.pc;
 
-            dbg!(code);
             let opcode = opcodes
                 .get(&code)
                 .expect(&format!("OpCode {:x} is not recognised", code));
