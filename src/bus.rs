@@ -1,7 +1,9 @@
+use crate::rom::Rom;
 use crate::Mem;
 
 pub struct Bus {
     cpu_vram: [u8; 2048],
+    rom: Rom,
 }
 
 const RAM: u16 = 0x0000;
@@ -10,10 +12,20 @@ const PPU_REGISTERS: u16 = 0x2000;
 const PPU_REGISTERS_MIRRORS_END: u16 = 0x3FFF;
 
 impl Bus {
-    pub fn new() -> Self {
+    pub fn new(rom: Rom) -> Self {
         Bus {
             cpu_vram: [0; 2048],
+            rom,
         }
+    }
+
+    fn read_prg_rom(&self, mut addr: u16) -> u8 {
+        addr -= 0x8000;
+        if self.rom.prg_rom.len() == 0x4000 && addr >= 0x4000 {
+            // mirroring
+            addr = addr % 0x4000;
+        }
+        self.rom.prg_rom[addr as usize]
     }
 }
 
@@ -27,8 +39,9 @@ impl Mem for Bus {
             PPU_REGISTERS..=PPU_REGISTERS_MIRRORS_END => {
                 todo!("PPU is not yet done");
             }
+            0x8000..=0xFFFF => self.read_prg_rom(addr),
             _ => {
-                println!("ignoring mem access at {}", addr);
+                println!("ignoring mem access at 0x{:x?}", addr);
                 0
             }
         }
@@ -43,8 +56,9 @@ impl Mem for Bus {
             PPU_REGISTERS..=PPU_REGISTERS_MIRRORS_END => {
                 todo!("PPU is not yet done");
             }
+            0x8000..=0xFFFF => panic!("Trying to write in ROM at addr : 0x{:x?}", addr),
             _ => {
-                println!("ignoring mem access at {}", addr);
+                println!("ignoring mem access at 0x{:x?}", addr);
             }
         }
     }
