@@ -319,7 +319,7 @@ impl CPU {
         let data = self.mem_read_u8(addr);
 
         let res = self.ra & data;
-        if res > 0 {
+        if res == 0 {
             self.flags.insert(CpuFlags::Z);
         } else {
             self.flags.remove(CpuFlags::Z);
@@ -413,14 +413,6 @@ impl CPU {
         };
 
         self.pc = indirect_ref;
-    }
-
-    fn jmp(&mut self, mode: &AddressingMode) {
-        if mode == &AddressingMode::Absolute {
-            self.jmp_abs();
-        } else {
-            self.jmp_ind();
-        }
     }
 
     fn jsr(&mut self) {
@@ -709,7 +701,15 @@ impl CPU {
                 opcodes::Code::INX => self.inx(),
                 opcodes::Code::INY => self.iny(),
 
-                opcodes::Code::JMP => self.jmp(&opcode.mode),
+                opcodes::Code::JMP => {
+                    // no clean way to differentiate the two while keeping a clean trace
+                    // kinda sad
+                    if opcode.code == 0x4C {
+                        self.jmp_abs();
+                    } else {
+                        self.jmp_ind();
+                    }
+                }
                 opcodes::Code::JSR => self.jsr(),
 
                 opcodes::Code::LDA => self.lda(&opcode.mode),
