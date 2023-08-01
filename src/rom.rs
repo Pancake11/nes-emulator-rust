@@ -161,7 +161,7 @@ pub mod test {
         let rom = Rom::new(&test_rom);
         match rom {
             Result::Ok(_) => assert!(false, "should not load rom"),
-            Result::Err(str) => assert_eq!(str, "NES2.0 format is not supported"),
+            Result::Err(str) => assert_eq!(str, "Unsupported iNes format"),
         }
     }
 }

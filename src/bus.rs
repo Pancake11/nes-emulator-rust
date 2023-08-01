@@ -50,7 +50,7 @@ impl Mem for Bus {
     fn mem_write_u8(&mut self, addr: u16, data: u8) {
         match addr {
             RAM..=RAM_MIRRORS_END => {
-                let mirror_down_addr = addr & 0b1111_1111;
+                let mirror_down_addr = addr & 0b11_1111_1111;
                 self.cpu_vram[mirror_down_addr as usize] = data;
             }
             PPU_REGISTERS..=PPU_REGISTERS_MIRRORS_END => {

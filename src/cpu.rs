@@ -29,7 +29,6 @@ pub struct CPU {
     // flags
     pub flags: CpuFlags,
     // memory
-    memory: [u8; 0xFFFF],
     pub bus: Bus,
 }
 
@@ -53,7 +52,7 @@ pub trait Mem {
     fn mem_write_u8(&mut self, addr: u16, data: u8);
 
     // TODO: use rusts native little endian conversion (from_le|ne_bytes)
-    fn mem_read_u16(&mut self, addr: u16) -> u16 {
+    fn mem_read_u16(&self, addr: u16) -> u16 {
         let lo = self.mem_read_u8(addr) as u16;
         let hi = self.mem_read_u8(addr + 1) as u16;
         (hi << 8) | (lo as u16)
@@ -77,7 +76,7 @@ impl Mem for CPU {
         self.bus.mem_write_u8(addr, data);
     }
 
-    fn mem_read_u16(&mut self, addr: u16) -> u16 {
+    fn mem_read_u16(&self, addr: u16) -> u16 {
         self.bus.mem_read_u16(addr)
     }
 
@@ -87,7 +86,7 @@ impl Mem for CPU {
 }
 
 impl CPU {
-    pub fn new() -> Self {
+    pub fn new(bus: Bus) -> Self {
         CPU {
             ra: 0,
             rx: 0,
@@ -95,43 +94,49 @@ impl CPU {
             sp: STACK_RESET,
             pc: 0,
             flags: CpuFlags::from_bits_truncate(0b100100),
-            memory: [0; 0xFFFF],
-            bus: Bus::new(),
+            bus,
         }
     }
 
-    fn get_operand_address(&mut self, mode: &AddressingMode) -> u16 {
+    fn get_operand_address(&self, mode: &AddressingMode) -> u16 {
         match mode {
             AddressingMode::Immediate => self.pc,
+            _ => self.get_absolute_address(mode, self.pc),
+        }
+    }
 
-            AddressingMode::ZeroPage => self.mem_read_u8(self.pc) as u16,
+    pub fn get_absolute_address(&self, mode: &AddressingMode, addr: u16) -> u16 {
+        match mode {
+            AddressingMode::Immediate => addr,
 
-            AddressingMode::Absolute => self.mem_read_u16(self.pc),
+            AddressingMode::ZeroPage => self.mem_read_u8(addr) as u16,
+
+            AddressingMode::Absolute => self.mem_read_u16(addr),
 
             AddressingMode::ZeroPage_X => {
-                let pos = self.mem_read_u8(self.pc);
+                let pos = self.mem_read_u8(addr);
                 let addr = pos.wrapping_add(self.rx) as u16;
                 addr
             }
             AddressingMode::ZeroPage_Y => {
-                let pos = self.mem_read_u8(self.pc);
+                let pos = self.mem_read_u8(addr);
                 let addr = pos.wrapping_add(self.ry) as u16;
                 addr
             }
 
             AddressingMode::Absolute_X => {
-                let base = self.mem_read_u16(self.pc);
+                let base = self.mem_read_u16(addr);
                 let addr = base.wrapping_add(self.rx as u16);
                 addr
             }
             AddressingMode::Absolute_Y => {
-                let base = self.mem_read_u16(self.pc);
+                let base = self.mem_read_u16(addr);
                 let addr = base.wrapping_add(self.ry as u16);
                 addr
             }
 
             AddressingMode::Indirect_X => {
-                let base = self.mem_read_u8(self.pc);
+                let base = self.mem_read_u8(addr);
 
                 let ptr: u8 = (base as u8).wrapping_add(self.rx);
                 let lo = self.mem_read_u8(ptr as u16);
@@ -139,7 +144,7 @@ impl CPU {
                 (hi as u16) << 8 | (lo as u16)
             }
             AddressingMode::Indirect_Y => {
-                let base = self.mem_read_u8(self.pc);
+                let base = self.mem_read_u8(addr);
 
                 let lo = self.mem_read_u8(base as u16);
                 let hi = self.mem_read_u8((base as u8).wrapping_add(1) as u16);
@@ -156,9 +161,18 @@ impl CPU {
 
     pub fn load(&mut self, program: Vec<u8>) {
         // program memory is in 0x8000 to 0xFFFF
-        self.memory[0x0600..(0x0600 + program.len())].copy_from_slice(&program[..]);
+        for i in 0..(program.len() as u16) {
+            self.mem_write_u8(0x0600 + i, program[i as usize]);
+        }
 
-        self.mem_write_u16(0xFFFC, 0x0600);
+        // self.mem_write_u16(0xFFFC, 0x0600);
+    }
+
+    pub fn load_and_run(&mut self, program: Vec<u8>) {
+        self.load(program);
+        self.reset();
+        self.pc = 0x0600;
+        self.run();
     }
 
     pub fn reset(&mut self) {
@@ -190,16 +204,10 @@ impl CPU {
 
     fn stack_push_u16(&mut self, data: u16) {
         let hi = (data >> 8) as u8;
-        let lo = (data & 0xFF) as u8;
+        let lo = (data & 0xff) as u8;
 
         self.stack_push_u8(hi);
         self.stack_push_u8(lo);
-    }
-
-    pub fn load_and_run(&mut self, program: Vec<u8>) {
-        self.load(program);
-        self.reset();
-        self.run();
     }
 
     fn set_ra(&mut self, data: u8) {
@@ -645,7 +653,9 @@ impl CPU {
         }
     }
 
-    pub fn run(&mut self) {}
+    pub fn run(&mut self) {
+        self.run_with_callback(|_| {});
+    }
 
     pub fn run_with_callback<F>(&mut self, mut callback: F)
     where
@@ -654,6 +664,8 @@ impl CPU {
         let ref opcodes: HashMap<u8, &'static opcodes::OpCode> = *opcodes::OPCODES_MAP;
 
         loop {
+            callback(self);
+
             let code = self.mem_read_u8(self.pc);
             self.pc += 1;
             let pc_state = self.pc;
@@ -662,7 +674,6 @@ impl CPU {
                 .get(&code)
                 .expect(&format!("OpCode {:x} is not recognised", code));
 
-            dbg!(opcode);
             match opcode.opcode {
                 opcodes::Code::ADC => self.adc(&opcode.mode),
                 opcodes::Code::AND => self.and(&opcode.mode),
@@ -744,8 +755,6 @@ impl CPU {
             if pc_state == self.pc {
                 self.pc += (opcode.len - 1) as u16;
             }
-
-            callback(self);
         }
     }
 }
@@ -753,10 +762,12 @@ impl CPU {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::rom::test;
 
     #[test]
     fn test_0xa9_lda_immediate_load_data() {
-        let mut cpu = CPU::new();
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![0xa9, 0x05, 0x00]);
         assert_eq!(cpu.ra, 0x05);
         assert!(cpu.flags.bits() & 0b0000_0010 == 0b00);
@@ -765,14 +776,16 @@ mod test {
 
     #[test]
     fn test_0xa9_lda_zero_flag() {
-        let mut cpu = CPU::new();
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![0xa9, 0x00, 0x00]);
         assert!(cpu.flags.bits() & 0b0000_0010 == 0b10);
     }
 
     #[test]
     fn text_0xaa_tax_move_a_to_x() {
-        let mut cpu = CPU::new();
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
         cpu.ra = 10;
         cpu.load_and_run(vec![0xa9, 0x0A, 0xAA, 0x00]);
 
@@ -781,7 +794,8 @@ mod test {
 
     #[test]
     fn test_5_op_working_together() {
-        let mut cpu = CPU::new();
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![0xa9, 0xc0, 0xaa, 0xe8, 0x00]);
 
         assert_eq!(cpu.rx, 0xc1);
@@ -789,7 +803,8 @@ mod test {
 
     #[test]
     fn test_inx_overflow() {
-        let mut cpu = CPU::new();
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
         cpu.rx = 0xff;
         cpu.load_and_run(vec![0xa9, 0xff, 0xaa, 0xe8, 0xe8, 0x00]);
 
@@ -798,7 +813,8 @@ mod test {
 
     #[test]
     fn test_lda_from_memory() {
-        let mut cpu = CPU::new();
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
         cpu.mem_write_u8(0x10, 0x55);
 
         cpu.load_and_run(vec![0xa5, 0x10, 0x00]);
