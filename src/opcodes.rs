@@ -59,6 +59,9 @@ pub enum Code {
     TXA,
     TXS,
     TYA,
+
+    // unofficial ops
+    DOP,
 }
 
 #[derive(Debug)]
@@ -165,7 +168,7 @@ lazy_static! {
         OpCode::new(0xC8, Code::INY, "INY", 1, 2, AddressingMode::None),
         OpCode::new(0x4C, Code::JMP, "JMP", 3, 3, AddressingMode::None),
         OpCode::new(0x6C, Code::JMP, "JMP", 3, 5, AddressingMode::None),
-        OpCode::new(0x20, Code::JSR, "JSR", 3, 6, AddressingMode::Absolute),
+        OpCode::new(0x20, Code::JSR, "JSR", 3, 6, AddressingMode::None),
         OpCode::new(0xA9, Code::LDA, "LDA", 2, 2, AddressingMode::Immediate),
         OpCode::new(0xA5, Code::LDA, "LDA", 2, 3, AddressingMode::ZeroPage),
         OpCode::new(0xB5, Code::LDA, "LDA", 2, 4, AddressingMode::ZeroPage_X),
@@ -244,6 +247,21 @@ lazy_static! {
         OpCode::new(0x8A, Code::TXA, "TXA", 1, 2, AddressingMode::None),
         OpCode::new(0x9A, Code::TXS, "TXS", 1, 2, AddressingMode::None),
         OpCode::new(0x98, Code::TYA, "TYA", 1, 2, AddressingMode::None),
+        // unofficial ops
+        OpCode::new(0x04, Code::DOP, "*NOP", 2, 3, AddressingMode::ZeroPage),
+        OpCode::new(0x14, Code::DOP, "*NOP", 2, 4, AddressingMode::ZeroPage_X),
+        OpCode::new(0x34, Code::DOP, "*NOP", 2, 4, AddressingMode::ZeroPage_X),
+        OpCode::new(0x44, Code::DOP, "*NOP", 2, 3, AddressingMode::ZeroPage),
+        OpCode::new(0x54, Code::DOP, "*NOP", 2, 4, AddressingMode::ZeroPage_X),
+        OpCode::new(0x64, Code::DOP, "*NOP", 2, 3, AddressingMode::ZeroPage),
+        OpCode::new(0x74, Code::DOP, "*NOP", 2, 4, AddressingMode::ZeroPage_X),
+        OpCode::new(0x80, Code::DOP, "*NOP", 2, 2, AddressingMode::Immediate),
+        OpCode::new(0x82, Code::DOP, "*NOP", 2, 2, AddressingMode::Immediate),
+        OpCode::new(0x89, Code::DOP, "*NOP", 2, 2, AddressingMode::Immediate),
+        OpCode::new(0xC2, Code::DOP, "*NOP", 2, 2, AddressingMode::Immediate),
+        OpCode::new(0xD4, Code::DOP, "*NOP", 2, 4, AddressingMode::ZeroPage_X),
+        OpCode::new(0xE2, Code::DOP, "*NOP", 2, 2, AddressingMode::Immediate),
+        OpCode::new(0xF4, Code::DOP, "*NOP", 2, 4, AddressingMode::ZeroPage_X),
     ];
     pub static ref OPCODES_MAP: HashMap<u8, &'static OpCode> = {
         let mut map = HashMap::new();

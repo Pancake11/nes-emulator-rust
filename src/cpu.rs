@@ -479,7 +479,7 @@ impl CPU {
     fn plp(&mut self) {
         self.flags.bits = self.stack_pop();
         self.flags.remove(CpuFlags::B);
-        self.flags.remove(CpuFlags::B2);
+        self.flags.insert(CpuFlags::B2);
     }
 
     fn rol_acc(&mut self) {
@@ -577,7 +577,7 @@ impl CPU {
     fn rti(&mut self) {
         self.flags.bits = self.stack_pop();
         self.flags.remove(CpuFlags::B);
-        self.flags.remove(CpuFlags::B2);
+        self.flags.insert(CpuFlags::B2);
 
         self.pc = self.stack_pop_u16();
     }
@@ -718,7 +718,7 @@ impl CPU {
 
                 opcodes::Code::LSR => self.lsr(&opcode.mode),
 
-                opcodes::Code::NOP => { /* nothing */ }
+                opcodes::Code::NOP | opcodes::Code::DOP => { /* nothing */ }
 
                 opcodes::Code::ORA => self.ora(&opcode.mode),
 
