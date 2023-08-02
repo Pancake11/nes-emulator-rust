@@ -631,6 +631,43 @@ impl CPU {
         self.pc = self.stack_pop_u16() + 1;
     }
 
+    fn lax(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        let data = self.mem_read_u8(addr);
+
+        self.set_ra(data);
+        self.rx = self.ra;
+    }
+
+    fn sax(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        let data = self.ra & self.rx;
+
+        self.mem_write_u8(addr, data);
+    }
+
+    fn dcp(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        let mut data = self.mem_read_u8(addr);
+
+        data = data.wrapping_sub(1);
+        self.mem_write_u8(addr, data);
+
+        if data <= self.ra {
+            self.flags.insert(CpuFlags::C);
+        }
+
+        self.update_zn_flags(self.ra.wrapping_sub(data));
+    }
+
+    fn isb(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        self.inc(mode);
+
+        let data = self.mem_read_u8(addr);
+        self.add_to_ra(((data).wrapping_neg().wrapping_sub(1)) as u8);
+    }
+
     fn update_zn_flags(&mut self, result: u8) {
         if result == 0 {
             self.flags = self.flags | CpuFlags::Z;
@@ -718,7 +755,7 @@ impl CPU {
 
                 opcodes::Code::LSR => self.lsr(&opcode.mode),
 
-                opcodes::Code::NOP | opcodes::Code::DOP => { /* nothing */ }
+                opcodes::Code::NOP | opcodes::Code::DOP | opcodes::Code::TOP => { /* nothing */ }
 
                 opcodes::Code::ORA => self.ora(&opcode.mode),
 
@@ -750,6 +787,11 @@ impl CPU {
                 opcodes::Code::TXA => self.set_ra(self.rx),
                 opcodes::Code::TXS => self.txs(),
                 opcodes::Code::TYA => self.set_ra(self.ry),
+
+                opcodes::Code::LAX => self.lax(&opcode.mode),
+                opcodes::Code::SAX => self.sax(&opcode.mode),
+                opcodes::Code::DCP => self.dcp(&opcode.mode),
+                opcodes::Code::ISB => self.isb(&opcode.mode),
             }
 
             if pc_state == self.pc {

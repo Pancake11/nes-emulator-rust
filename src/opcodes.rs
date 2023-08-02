@@ -62,6 +62,11 @@ pub enum Code {
 
     // unofficial ops
     DOP,
+    TOP,
+    LAX,
+    SAX,
+    DCP,
+    ISB,
 }
 
 #[derive(Debug)]
@@ -262,7 +267,46 @@ lazy_static! {
         OpCode::new(0xD4, Code::DOP, "*NOP", 2, 4, AddressingMode::ZeroPage_X),
         OpCode::new(0xE2, Code::DOP, "*NOP", 2, 2, AddressingMode::Immediate),
         OpCode::new(0xF4, Code::DOP, "*NOP", 2, 4, AddressingMode::ZeroPage_X),
+        OpCode::new(0x0C, Code::TOP, "*NOP", 3, 4, AddressingMode::Absolute),
+        OpCode::new(0x1C, Code::TOP, "*NOP", 3, 4, AddressingMode::Absolute_X),
+        OpCode::new(0x3C, Code::TOP, "*NOP", 3, 4, AddressingMode::Absolute_X),
+        OpCode::new(0x5C, Code::TOP, "*NOP", 3, 4, AddressingMode::Absolute_X),
+        OpCode::new(0x7C, Code::TOP, "*NOP", 3, 4, AddressingMode::Absolute_X),
+        OpCode::new(0xDC, Code::TOP, "*NOP", 3, 4, AddressingMode::Absolute_X),
+        OpCode::new(0xFC, Code::TOP, "*NOP", 3, 4, AddressingMode::Absolute_X),
+        OpCode::new(0x1A, Code::NOP, "*NOP", 1, 2, AddressingMode::None),
+        OpCode::new(0x3A, Code::NOP, "*NOP", 1, 2, AddressingMode::None),
+        OpCode::new(0x5A, Code::NOP, "*NOP", 1, 2, AddressingMode::None),
+        OpCode::new(0x7A, Code::NOP, "*NOP", 1, 2, AddressingMode::None),
+        OpCode::new(0xDA, Code::NOP, "*NOP", 1, 2, AddressingMode::None),
+        OpCode::new(0xFA, Code::NOP, "*NOP", 1, 2, AddressingMode::None),
+        OpCode::new(0xA7, Code::LAX, "*LAX", 2, 3, AddressingMode::ZeroPage),
+        OpCode::new(0xB7, Code::LAX, "*LAX", 2, 4, AddressingMode::ZeroPage_Y),
+        OpCode::new(0xAF, Code::LAX, "*LAX", 3, 4, AddressingMode::Absolute),
+        OpCode::new(0xBF, Code::LAX, "*LAX", 3, 4, AddressingMode::Absolute_Y),
+        OpCode::new(0xA3, Code::LAX, "*LAX", 2, 6, AddressingMode::Indirect_X),
+        OpCode::new(0xB3, Code::LAX, "*LAX", 2, 5, AddressingMode::Indirect_Y),
+        OpCode::new(0x87, Code::SAX, "*SAX", 2, 3, AddressingMode::ZeroPage),
+        OpCode::new(0x97, Code::SAX, "*SAX", 2, 4, AddressingMode::ZeroPage_Y),
+        OpCode::new(0x83, Code::SAX, "*SAX", 2, 6, AddressingMode::Indirect_Y),
+        OpCode::new(0x8F, Code::SAX, "*SAX", 3, 4, AddressingMode::Absolute),
+        OpCode::new(0xEB, Code::SBC, "*SBC", 2, 2, AddressingMode::Immediate),
+        OpCode::new(0xC7, Code::DCP, "*DCP", 2, 5, AddressingMode::ZeroPage),
+        OpCode::new(0xD7, Code::DCP, "*DCP", 2, 6, AddressingMode::ZeroPage_X),
+        OpCode::new(0xCF, Code::DCP, "*DCP", 3, 6, AddressingMode::Absolute),
+        OpCode::new(0xDF, Code::DCP, "*DCP", 3, 7, AddressingMode::Absolute_X),
+        OpCode::new(0xDB, Code::DCP, "*DCP", 3, 7, AddressingMode::Absolute_Y),
+        OpCode::new(0xC3, Code::DCP, "*DCP", 2, 8, AddressingMode::Indirect_X),
+        OpCode::new(0xD3, Code::DCP, "*DCP", 2, 8, AddressingMode::Indirect_Y),
+        OpCode::new(0xE7, Code::ISB, "*ISB", 2, 5, AddressingMode::ZeroPage),
+        OpCode::new(0xF7, Code::ISB, "*ISB", 2, 6, AddressingMode::ZeroPage_X),
+        OpCode::new(0xEF, Code::ISB, "*ISB", 3, 6, AddressingMode::Absolute),
+        OpCode::new(0xFF, Code::ISB, "*ISB", 3, 7, AddressingMode::Absolute_X),
+        OpCode::new(0xFB, Code::ISB, "*ISB", 3, 7, AddressingMode::Absolute_Y),
+        OpCode::new(0xE3, Code::ISB, "*ISB", 2, 8, AddressingMode::Indirect_X),
+        OpCode::new(0xF3, Code::ISB, "*ISB", 2, 8, AddressingMode::Indirect_Y),
     ];
+
     pub static ref OPCODES_MAP: HashMap<u8, &'static OpCode> = {
         let mut map = HashMap::new();
         for cpuop in &*CPU_OPS_CODES {
