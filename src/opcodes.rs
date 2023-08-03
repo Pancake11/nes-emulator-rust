@@ -67,6 +67,10 @@ pub enum Code {
     SAX,
     DCP,
     ISB,
+    SLO,
+    RLA,
+    SRE,
+    RRA,
 }
 
 #[derive(Debug)]
@@ -253,6 +257,7 @@ lazy_static! {
         OpCode::new(0x9A, Code::TXS, "TXS", 1, 2, AddressingMode::None),
         OpCode::new(0x98, Code::TYA, "TYA", 1, 2, AddressingMode::None),
         // unofficial ops
+        // DOP => double nop
         OpCode::new(0x04, Code::DOP, "*NOP", 2, 3, AddressingMode::ZeroPage),
         OpCode::new(0x14, Code::DOP, "*NOP", 2, 4, AddressingMode::ZeroPage_X),
         OpCode::new(0x34, Code::DOP, "*NOP", 2, 4, AddressingMode::ZeroPage_X),
@@ -267,6 +272,7 @@ lazy_static! {
         OpCode::new(0xD4, Code::DOP, "*NOP", 2, 4, AddressingMode::ZeroPage_X),
         OpCode::new(0xE2, Code::DOP, "*NOP", 2, 2, AddressingMode::Immediate),
         OpCode::new(0xF4, Code::DOP, "*NOP", 2, 4, AddressingMode::ZeroPage_X),
+        // TOP => triple NOP
         OpCode::new(0x0C, Code::TOP, "*NOP", 3, 4, AddressingMode::Absolute),
         OpCode::new(0x1C, Code::TOP, "*NOP", 3, 4, AddressingMode::Absolute_X),
         OpCode::new(0x3C, Code::TOP, "*NOP", 3, 4, AddressingMode::Absolute_X),
@@ -274,23 +280,28 @@ lazy_static! {
         OpCode::new(0x7C, Code::TOP, "*NOP", 3, 4, AddressingMode::Absolute_X),
         OpCode::new(0xDC, Code::TOP, "*NOP", 3, 4, AddressingMode::Absolute_X),
         OpCode::new(0xFC, Code::TOP, "*NOP", 3, 4, AddressingMode::Absolute_X),
+        // just normal undocumented nops
         OpCode::new(0x1A, Code::NOP, "*NOP", 1, 2, AddressingMode::None),
         OpCode::new(0x3A, Code::NOP, "*NOP", 1, 2, AddressingMode::None),
         OpCode::new(0x5A, Code::NOP, "*NOP", 1, 2, AddressingMode::None),
         OpCode::new(0x7A, Code::NOP, "*NOP", 1, 2, AddressingMode::None),
         OpCode::new(0xDA, Code::NOP, "*NOP", 1, 2, AddressingMode::None),
         OpCode::new(0xFA, Code::NOP, "*NOP", 1, 2, AddressingMode::None),
+        // LAX => load acc to x with memory
         OpCode::new(0xA7, Code::LAX, "*LAX", 2, 3, AddressingMode::ZeroPage),
         OpCode::new(0xB7, Code::LAX, "*LAX", 2, 4, AddressingMode::ZeroPage_Y),
         OpCode::new(0xAF, Code::LAX, "*LAX", 3, 4, AddressingMode::Absolute),
         OpCode::new(0xBF, Code::LAX, "*LAX", 3, 4, AddressingMode::Absolute_Y),
         OpCode::new(0xA3, Code::LAX, "*LAX", 2, 6, AddressingMode::Indirect_X),
         OpCode::new(0xB3, Code::LAX, "*LAX", 2, 5, AddressingMode::Indirect_Y),
+        // SAX => and x reg with acc then store in mem
         OpCode::new(0x87, Code::SAX, "*SAX", 2, 3, AddressingMode::ZeroPage),
         OpCode::new(0x97, Code::SAX, "*SAX", 2, 4, AddressingMode::ZeroPage_Y),
         OpCode::new(0x83, Code::SAX, "*SAX", 2, 6, AddressingMode::Indirect_Y),
         OpCode::new(0x8F, Code::SAX, "*SAX", 3, 4, AddressingMode::Absolute),
+        // same as E9
         OpCode::new(0xEB, Code::SBC, "*SBC", 2, 2, AddressingMode::Immediate),
+        // DCP =? subs 1 from memory
         OpCode::new(0xC7, Code::DCP, "*DCP", 2, 5, AddressingMode::ZeroPage),
         OpCode::new(0xD7, Code::DCP, "*DCP", 2, 6, AddressingMode::ZeroPage_X),
         OpCode::new(0xCF, Code::DCP, "*DCP", 3, 6, AddressingMode::Absolute),
@@ -298,6 +309,7 @@ lazy_static! {
         OpCode::new(0xDB, Code::DCP, "*DCP", 3, 7, AddressingMode::Absolute_Y),
         OpCode::new(0xC3, Code::DCP, "*DCP", 2, 8, AddressingMode::Indirect_X),
         OpCode::new(0xD3, Code::DCP, "*DCP", 2, 8, AddressingMode::Indirect_Y),
+        // ISB => inc mem by one then sub mem from acc
         OpCode::new(0xE7, Code::ISB, "*ISB", 2, 5, AddressingMode::ZeroPage),
         OpCode::new(0xF7, Code::ISB, "*ISB", 2, 6, AddressingMode::ZeroPage_X),
         OpCode::new(0xEF, Code::ISB, "*ISB", 3, 6, AddressingMode::Absolute),
@@ -305,6 +317,38 @@ lazy_static! {
         OpCode::new(0xFB, Code::ISB, "*ISB", 3, 7, AddressingMode::Absolute_Y),
         OpCode::new(0xE3, Code::ISB, "*ISB", 2, 8, AddressingMode::Indirect_X),
         OpCode::new(0xF3, Code::ISB, "*ISB", 2, 8, AddressingMode::Indirect_Y),
+        // SLO => shift left from 1b in mem then or acc with mem
+        OpCode::new(0x07, Code::SLO, "*SLO", 2, 5, AddressingMode::ZeroPage),
+        OpCode::new(0x17, Code::SLO, "*SLO", 2, 6, AddressingMode::ZeroPage_X),
+        OpCode::new(0x0F, Code::SLO, "*SLO", 3, 6, AddressingMode::Absolute),
+        OpCode::new(0x1F, Code::SLO, "*SLO", 3, 7, AddressingMode::Absolute_X),
+        OpCode::new(0x1B, Code::SLO, "*SLO", 3, 7, AddressingMode::Absolute_Y),
+        OpCode::new(0x03, Code::SLO, "*SLO", 2, 8, AddressingMode::Indirect_X),
+        OpCode::new(0x13, Code::SLO, "*SLO", 2, 8, AddressingMode::Indirect_Y),
+        // RLA => rot 1b left in mem then add mem to acc (with carry)
+        OpCode::new(0x27, Code::RLA, "*RLA", 2, 5, AddressingMode::ZeroPage),
+        OpCode::new(0x37, Code::RLA, "*RLA", 2, 6, AddressingMode::ZeroPage_X),
+        OpCode::new(0x2F, Code::RLA, "*RLA", 3, 6, AddressingMode::Absolute),
+        OpCode::new(0x3F, Code::RLA, "*RLA", 3, 7, AddressingMode::Absolute_X),
+        OpCode::new(0x3B, Code::RLA, "*RLA", 3, 7, AddressingMode::Absolute_Y),
+        OpCode::new(0x23, Code::RLA, "*RLA", 2, 8, AddressingMode::Indirect_X),
+        OpCode::new(0x33, Code::RLA, "*RLA", 2, 8, AddressingMode::Indirect_Y),
+        // SRE => shift right 1b in mem then XOR the acc with mem
+        OpCode::new(0x47, Code::SRE, "*SRE", 2, 5, AddressingMode::ZeroPage),
+        OpCode::new(0x57, Code::SRE, "*SRE", 2, 6, AddressingMode::ZeroPage_X),
+        OpCode::new(0x4F, Code::SRE, "*SRE", 3, 6, AddressingMode::Absolute),
+        OpCode::new(0x5F, Code::SRE, "*SRE", 3, 7, AddressingMode::Absolute_X),
+        OpCode::new(0x5B, Code::SRE, "*SRE", 3, 7, AddressingMode::Absolute_Y),
+        OpCode::new(0x43, Code::SRE, "*SRE", 2, 8, AddressingMode::Indirect_X),
+        OpCode::new(0x53, Code::SRE, "*SRE", 2, 8, AddressingMode::Indirect_Y),
+        // RRA => rotate 1b right in mem, then add mem to acc
+        OpCode::new(0x67, Code::RRA, "*RRA", 2, 5, AddressingMode::ZeroPage),
+        OpCode::new(0x77, Code::RRA, "*RRA", 2, 6, AddressingMode::ZeroPage_X),
+        OpCode::new(0x6F, Code::RRA, "*RRA", 3, 6, AddressingMode::Absolute),
+        OpCode::new(0x7F, Code::RRA, "*RRA", 3, 7, AddressingMode::Absolute_X),
+        OpCode::new(0x7B, Code::RRA, "*RRA", 3, 7, AddressingMode::Absolute_Y),
+        OpCode::new(0x63, Code::RRA, "*RRA", 2, 8, AddressingMode::Indirect_X),
+        OpCode::new(0x73, Code::RRA, "*RRA", 2, 8, AddressingMode::Indirect_Y),
     ];
 
     pub static ref OPCODES_MAP: HashMap<u8, &'static OpCode> = {

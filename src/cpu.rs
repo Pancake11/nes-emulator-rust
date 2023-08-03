@@ -668,6 +668,38 @@ impl CPU {
         self.add_to_ra(((data).wrapping_neg().wrapping_sub(1)) as u8);
     }
 
+    fn slo(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        self.asl(mode);
+
+        let data = self.mem_read_u8(addr);
+        self.set_ra(data | self.ra);
+    }
+
+    fn rla(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        self.rol(mode);
+
+        let data = self.mem_read_u8(addr);
+        self.set_ra(data & self.ra);
+    }
+
+    fn sre(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        self.lsr(mode);
+
+        let data = self.mem_read_u8(addr);
+        self.set_ra(data ^ self.ra);
+    }
+
+    fn rra(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        self.ror(mode);
+
+        let data = self.mem_read_u8(addr);
+        self.add_to_ra(data);
+    }
+
     fn update_zn_flags(&mut self, result: u8) {
         if result == 0 {
             self.flags = self.flags | CpuFlags::Z;
@@ -788,10 +820,15 @@ impl CPU {
                 opcodes::Code::TXS => self.txs(),
                 opcodes::Code::TYA => self.set_ra(self.ry),
 
+                // unofficials
                 opcodes::Code::LAX => self.lax(&opcode.mode),
                 opcodes::Code::SAX => self.sax(&opcode.mode),
                 opcodes::Code::DCP => self.dcp(&opcode.mode),
                 opcodes::Code::ISB => self.isb(&opcode.mode),
+                opcodes::Code::SLO => self.slo(&opcode.mode),
+                opcodes::Code::RLA => self.rla(&opcode.mode),
+                opcodes::Code::SRE => self.sre(&opcode.mode),
+                opcodes::Code::RRA => self.rra(&opcode.mode),
             }
 
             if pc_state == self.pc {
