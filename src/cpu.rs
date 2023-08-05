@@ -48,11 +48,11 @@ pub enum AddressingMode {
 }
 
 pub trait Mem {
-    fn mem_read_u8(&self, addr: u16) -> u8;
+    fn mem_read_u8(&mut self, addr: u16) -> u8;
     fn mem_write_u8(&mut self, addr: u16, data: u8);
 
     // TODO: use rusts native little endian conversion (from_le|ne_bytes)
-    fn mem_read_u16(&self, addr: u16) -> u16 {
+    fn mem_read_u16(&mut self, addr: u16) -> u16 {
         let lo = self.mem_read_u8(addr) as u16;
         let hi = self.mem_read_u8(addr + 1) as u16;
         (hi << 8) | (lo as u16)
@@ -68,7 +68,7 @@ pub trait Mem {
 }
 
 impl Mem for CPU {
-    fn mem_read_u8(&self, addr: u16) -> u8 {
+    fn mem_read_u8(&mut self, addr: u16) -> u8 {
         self.bus.mem_read_u8(addr)
     }
 
@@ -76,7 +76,7 @@ impl Mem for CPU {
         self.bus.mem_write_u8(addr, data);
     }
 
-    fn mem_read_u16(&self, addr: u16) -> u16 {
+    fn mem_read_u16(&mut self, addr: u16) -> u16 {
         self.bus.mem_read_u16(addr)
     }
 
@@ -98,14 +98,14 @@ impl CPU {
         }
     }
 
-    fn get_operand_address(&self, mode: &AddressingMode) -> u16 {
+    fn get_operand_address(&mut self, mode: &AddressingMode) -> u16 {
         match mode {
             AddressingMode::Immediate => self.pc,
             _ => self.get_absolute_address(mode, self.pc),
         }
     }
 
-    pub fn get_absolute_address(&self, mode: &AddressingMode, addr: u16) -> u16 {
+    pub fn get_absolute_address(&mut self, mode: &AddressingMode, addr: u16) -> u16 {
         match mode {
             AddressingMode::Immediate => addr,
 
